@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C1117">
+<title>Blind-Track — Pemantauan Smart Blind Stick</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   BLIND-TRACK — palette taken from the white cane and the
+   tactile guiding block (ubin pemandu) this product works with.
+   ============================================================ */
+:root{
+  --asphalt-900:#0C1117; --asphalt-800:#121A22; --asphalt-700:#18222C; --asphalt-600:#22303D;
+  --rule:#25333F; --rule-soft:#1C2732;
+  --cane-white:#EEF3F7; --cane-red:#E23B3B; --cane-red-dim:#7A1F22;
+  --tactile:#FFC94A; --tactile-dim:#6B5218; --teal:#17B8C4; --grass:#3DD68C;
+  --ink:#EEF3F7; --ink-2:#A9BACA; --ink-3:#6C8098;
+  --r-lg:16px; --r-md:12px; --r-sm:9px;
+  --f-disp:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sidebar:392px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--asphalt-900);color:var(--ink);font-family:var(--f-body);
+  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--tactile);outline-offset:2px;border-radius:4px}
+.eyebrow{font-family:var(--f-disp);font-size:12px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3)}
+.data{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+
+.app{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+
+/* ---------------- header ---------------- */
+.topbar{display:flex;align-items:center;gap:18px;flex-shrink:0;padding:11px 18px;
+  background:var(--asphalt-800);border-bottom:1px solid var(--rule)}
+.brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+.cane{width:15px;height:38px;flex-shrink:0;display:block}
+.wordmark{font-family:var(--f-disp);font-size:24px;font-weight:700;letter-spacing:.05em;
+  line-height:1;text-transform:uppercase}
+.wordmark em{font-style:normal;color:var(--tactile)}
+.brand p{margin:2px 0 0;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.pills{display:flex;align-items:center;gap:7px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.pill{display:flex;align-items:center;gap:7px;padding:6px 11px;background:var(--asphalt-700);
+  border:1px solid var(--rule);border-radius:100px;font-size:11.5px;color:var(--ink-2);white-space:nowrap}
+.pill b{font-family:var(--f-data);font-weight:500;color:var(--ink);font-size:11.5px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--grass);flex-shrink:0}
+.dot.live{box-shadow:0 0 0 0 rgba(61,214,140,.6);animation:ping 2.4s infinite}
+.dot.off{background:var(--ink-3);animation:none;box-shadow:none}
+@keyframes ping{70%{box-shadow:0 0 0 7px rgba(61,214,140,0)}100%{box-shadow:0 0 0 0 rgba(61,214,140,0)}}
+.clock{font-family:var(--f-data);font-size:16px;font-weight:500;padding-left:4px}
+
+/* ---------------- SOS ---------------- */
+.sos{flex-shrink:0;display:none;align-items:center;gap:14px;padding:12px 18px;
+  background:linear-gradient(90deg,#3A0F12 0%,#22161B 62%,var(--asphalt-800) 100%);border-bottom:1px solid #5A1E22}
+.sos.on{display:flex;animation:drop .32s cubic-bezier(.2,.9,.3,1.2)}
+.sos.ack{background:linear-gradient(90deg,#2A2413 0%,#1D1E1B 62%,var(--asphalt-800) 100%);border-bottom-color:#5A4A1E}
+@keyframes drop{from{transform:translateY(-100%);opacity:0}to{transform:none;opacity:1}}
+.sos-mark{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;
+  background:var(--cane-red);font-family:var(--f-disp);font-weight:700;font-size:15px;
+  letter-spacing:.04em;color:#fff;animation:pulse 1.15s ease-in-out infinite}
+.sos.ack .sos-mark{background:var(--tactile);color:#241A00;animation:none}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(226,59,59,.55)}50%{box-shadow:0 0 0 11px rgba(226,59,59,0)}}
+.sos-text{min-width:0}
+.sos-text h2{margin:0;font-family:var(--f-disp);font-size:19px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.sos-text p{margin:1px 0 0;font-size:12.5px;color:var(--ink-2)}
+.sos-act{margin-left:auto;display:flex;gap:8px;flex-shrink:0}
+
+.layout{flex:1;display:flex;min-height:0}
+.panel{width:var(--sidebar);flex-shrink:0;background:var(--asphalt-800);border-right:1px solid var(--rule);
+  overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--asphalt-600) transparent}
+.panel::-webkit-scrollbar{width:8px}
+.panel::-webkit-scrollbar-thumb{background:var(--asphalt-600);border-radius:8px}
+.block{padding:16px 18px;border-bottom:1px solid var(--rule-soft)}
+.block-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.block-head .eyebrow{flex:1}
+
+.loc-name{font-family:var(--f-disp);font-size:31px;font-weight:600;line-height:1.05;margin:0 0 5px}
+.loc-sub{margin:0;color:var(--ink-2);font-size:12.5px;line-height:1.5}
+.loc-meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:var(--r-sm);
+  background:var(--asphalt-700);border:1px solid var(--rule);font-family:var(--f-data);font-size:11px;color:var(--ink-2)}
+.chip span{color:var(--ink-3);font-family:var(--f-body);letter-spacing:.05em;text-transform:uppercase;font-size:9.5px}
+.fresh{margin-top:11px;font-size:11.5px;color:var(--ink-3);line-height:1.7}
+.fresh b{color:var(--tactile);font-family:var(--f-data);font-weight:500}
+
+.tel{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule-soft);
+  border:1px solid var(--rule-soft);border-radius:var(--r-md);overflow:hidden}
+.tel div{background:var(--asphalt-700);padding:11px 12px}
+.tel .k{font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.tel .v{font-family:var(--f-data);font-size:16px;font-weight:500;line-height:1}
+.tel .v small{font-size:10px;color:var(--ink-3);font-weight:400}
+.bar{height:3px;border-radius:2px;background:var(--asphalt-600);margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--grass);border-radius:2px;transition:width .5s}
+.bar i.warn{background:var(--tactile)} .bar i.bad{background:var(--cane-red)}
+
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;border-radius:var(--r-sm);
+  border:1px solid var(--rule);background:var(--asphalt-700);font-size:13px;font-weight:500;
+  text-decoration:none;color:var(--ink);transition:background .16s,border-color .16s,transform .08s}
+.btn:hover{background:var(--asphalt-600);border-color:#31424F}
+.btn:active{transform:translateY(1px)}
+.btn svg{flex-shrink:0}
+.btn-primary{background:var(--tactile);color:#241A00;border-color:var(--tactile);font-weight:600}
+.btn-primary:hover{background:#FFD470;border-color:#FFD470}
+.btn-teal{background:var(--teal);color:#04262A;border-color:var(--teal);font-weight:600}
+.btn-teal:hover{background:#2BD0DB;border-color:#2BD0DB}
+.btn-red{background:var(--cane-red);color:#fff;border-color:var(--cane-red);font-weight:600}
+.btn-red:hover{background:#EC5253;border-color:#EC5253}
+.btn-sm{padding:7px 12px;font-size:12px}
+.wide{grid-column:1/-1}
+
+.hist{list-style:none;margin:0;padding:0}
+.hist li{position:relative;display:flex;gap:13px;padding:9px 10px 9px 0;border-radius:var(--r-sm);
+  cursor:pointer;transition:background .14s}
+.hist li:hover,.hist li.active{background:var(--asphalt-700)}
+.rail{position:relative;width:24px;flex-shrink:0;display:flex;justify-content:center}
+.rail::before{content:"";position:absolute;top:-9px;bottom:-9px;width:2px;
+  background:repeating-linear-gradient(to bottom,var(--rule) 0 4px,transparent 4px 8px)}
+.hist li:first-child .rail::before{top:14px}
+.hist li:last-child .rail::before{bottom:auto;height:14px}
+.rail i{position:relative;width:9px;height:9px;margin-top:5px;border-radius:2px;
+  background:var(--asphalt-600);border:1px solid var(--rule);transform:rotate(45deg)}
+.hist li:first-child .rail i{background:var(--tactile);border-color:var(--tactile);box-shadow:0 0 0 4px rgba(255,201,74,.13)}
+.hist li.active .rail i{background:var(--teal);border-color:var(--teal)}
+.h-body{min-width:0;flex:1}
+.h-title{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-sub{font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-time{font-family:var(--f-data);font-size:12px;color:var(--ink-2);text-align:right;flex-shrink:0;padding-top:1px}
+.h-time small{display:block;font-size:9.5px;color:var(--ink-3);margin-top:2px}
+.tagx{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:3px;font-size:9px;
+  letter-spacing:.08em;text-transform:uppercase;vertical-align:1px;font-weight:600}
+.tag-sos{background:var(--cane-red-dim);color:#FFB3B3}
+.tag-home{background:#173A2A;color:#7FE0AE}
+.tag-stop{background:var(--asphalt-600);color:var(--ink-2)}
+
+.toggle{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-3);cursor:pointer;user-select:none}
+.sw{width:30px;height:17px;border-radius:20px;background:var(--asphalt-600);position:relative;transition:background .18s;flex-shrink:0}
+.sw::after{content:"";position:absolute;top:2.5px;left:2.5px;width:12px;height:12px;border-radius:50%;
+  background:var(--ink-3);transition:transform .18s,background .18s}
+.toggle input{position:absolute;opacity:0;width:0;height:0}
+.toggle input:checked + .sw{background:var(--tactile-dim)}
+.toggle input:checked + .sw::after{transform:translateX(13px);background:var(--tactile)}
+
+/* ============================================================ MAP */
+.mapwrap{position:relative;flex:1;min-width:0;background:#0A0E13;overflow:hidden}
+#map{position:absolute;inset:0;background:#0A0E13}
+.leaflet-container{font-family:var(--f-body);background:#0A0E13}
+.leaflet-control-attribution{background:rgba(12,17,23,.85)!important;color:var(--ink-3)!important;
+  font-size:9.5px!important;padding:2px 7px!important;border-radius:6px 0 0 0}
+.leaflet-control-attribution a{color:var(--ink-2)!important}
+.leaflet-control-scale-line{background:rgba(12,17,23,.85)!important;border:1px solid var(--rule)!important;
+  border-top:0!important;color:var(--ink-2)!important;font-family:var(--f-data);font-size:10px;padding:2px 6px}
+
+/* markers rendered as divIcons anchored at 0,0 */
+.mk-wrap{width:0!important;height:0!important;background:none!important;border:none!important}
+.mk-main .pin{position:absolute;left:-13px;top:-36px;width:26px;height:36px;
+  filter:drop-shadow(0 4px 7px rgba(0,0,0,.65));cursor:pointer}
+.mk-main .radar{position:absolute;left:-16px;top:-16px;width:32px;height:32px;border-radius:50%;
+  border:2px solid var(--tactile);opacity:0;animation:radar 2.2s ease-out infinite}
+.mk-main .radar.d2{animation-delay:1.1s}
+.mk-main.is-sos .radar{border-color:var(--cane-red)}
+@keyframes radar{0%{transform:scale(.3);opacity:.7}100%{transform:scale(2.4);opacity:0}}
+.mk-hist{position:absolute;left:-6px;top:-6px;width:12px;height:12px;border-radius:2px;
+  background:#101922;border:2px solid var(--tactile);transform:rotate(45deg);cursor:pointer;
+  transition:transform .15s;box-shadow:0 2px 5px rgba(0,0,0,.5)}
+.mk-hist:hover{transform:rotate(45deg) scale(1.35)}
+.mk-hist.on{background:var(--teal);border-color:var(--teal)}
+.mk-guard{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;
+  background:#0C1117;border:3px solid var(--teal);box-shadow:0 0 0 6px rgba(23,184,196,.15)}
+.mk-guard b{position:absolute;left:50%;top:-23px;transform:translateX(-50%);font-size:10.5px;
+  color:#79D8E0;font-weight:500;white-space:nowrap;letter-spacing:.04em}
+
+.map-actions{position:absolute;top:14px;left:50%;transform:translate(-50%,-140%);display:flex;gap:9px;
+  padding:7px;background:rgba(12,17,23,.9);backdrop-filter:blur(9px);border:1px solid var(--rule);
+  border-radius:100px;opacity:0;pointer-events:none;
+  transition:transform .26s cubic-bezier(.2,.9,.3,1.15),opacity .2s;z-index:600}
+.map-actions.show{transform:translate(-50%,0);opacity:1;pointer-events:auto}
+.map-actions .btn{border-radius:100px;padding:9px 18px}
+
+.basemap{position:absolute;top:14px;left:14px;z-index:600;display:flex;gap:3px;padding:3px;
+  background:rgba(12,17,23,.9);backdrop-filter:blur(9px);border:1px solid var(--rule);border-radius:100px}
+.basemap button{padding:6px 13px;border-radius:100px;font-size:11.5px;color:var(--ink-3)}
+.basemap button:hover{color:var(--ink)}
+.basemap button.on{background:var(--asphalt-600);color:var(--ink)}
+
+.zoom{position:absolute;right:14px;bottom:38px;display:flex;flex-direction:column;gap:6px;z-index:600}
+.zoom button{width:36px;height:36px;display:grid;place-items:center;border-radius:var(--r-sm);
+  background:rgba(18,26,34,.92);border:1px solid var(--rule);backdrop-filter:blur(6px);
+  font-family:var(--f-data);font-size:17px;color:var(--ink-2)}
+.zoom button:hover{background:var(--asphalt-600);color:var(--ink)}
+
+.legend{position:absolute;left:14px;bottom:38px;z-index:600;padding:10px 12px;background:rgba(18,26,34,.9);
+  border:1px solid var(--rule);border-radius:var(--r-md);backdrop-filter:blur(6px);font-size:11px;color:var(--ink-2)}
+.legend div{display:flex;align-items:center;gap:8px}
+.legend div + div{margin-top:6px}
+.legend b{width:16px;height:3px;border-radius:2px;flex-shrink:0}
+
+#gframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none;z-index:400;
+  filter:saturate(.95)}
+.mapwrap.gmode #gframe{display:block}
+.mapwrap.gmode .zoom,.mapwrap.gmode .legend,
+.mapwrap.gmode .popup,.mapwrap.gmode .map-actions{display:none!important}
+.gbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:600;display:none;
+  align-items:center;gap:7px;padding:7px 8px;background:rgba(12,17,23,.93);backdrop-filter:blur(9px);
+  border:1px solid var(--rule);border-radius:100px;max-width:calc(100% - 24px);overflow-x:auto;
+  scrollbar-width:none}
+.gbar::-webkit-scrollbar{display:none}
+.mapwrap.gmode .gbar{display:flex}
+.gbar .btn{border-radius:100px;padding:8px 15px;font-size:12px;white-space:nowrap;flex-shrink:0}
+.gbar .gtag{font-family:var(--f-disp);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);padding:0 8px 0 6px;flex-shrink:0}
+.popup{position:absolute;z-index:700;width:252px;padding:13px 14px;background:var(--asphalt-800);
+  border:1px solid var(--rule);border-radius:var(--r-md);box-shadow:0 18px 40px rgba(0,0,0,.55);
+  transform:translate(-50%,-100%) scale(.94);opacity:0;pointer-events:none;transition:opacity .16s,transform .16s}
+.popup.show{opacity:1;transform:translate(-50%,-100%) scale(1);pointer-events:auto}
+.popup::after{content:"";position:absolute;left:50%;bottom:-7px;width:12px;height:12px;margin-left:-6px;
+  background:var(--asphalt-800);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);transform:rotate(45deg)}
+.popup h4{margin:0 0 3px;font-family:var(--f-disp);font-size:17px;font-weight:600;padding-right:18px}
+.popup p{margin:0;font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.popup .kv{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-family:var(--f-data);
+  font-size:11px;color:var(--ink-3)}
+.popup .kv b{color:var(--ink-2);font-weight:500}
+.popup .pbtn{display:flex;gap:6px;margin-top:11px}
+.popup .pbtn .btn{flex:1;padding:7px;font-size:11.5px}
+.popup .x{position:absolute;top:9px;right:9px;width:20px;height:20px;border-radius:5px;color:var(--ink-3);
+  display:grid;place-items:center;font-size:15px;line-height:1}
+.popup .x:hover{background:var(--asphalt-600);color:var(--ink)}
+
+.toasts{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);z-index:900;display:flex;
+  flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{padding:10px 16px;border-radius:100px;background:var(--asphalt-600);border:1px solid var(--rule);
+  font-size:12.5px;box-shadow:0 10px 26px rgba(0,0,0,.5);animation:rise .28s cubic-bezier(.2,.9,.3,1.15);
+  max-width:min(92vw,440px);text-align:center}
+.toast.good{border-color:#1F5E42;background:#12261D}
+.toast.warn{border-color:#5A4A1E;background:#241E10}
+@keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+
+.simbtn{position:absolute;right:14px;top:14px;z-index:800;display:flex;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:100px;background:rgba(18,26,34,.92);border:1px dashed var(--rule);
+  backdrop-filter:blur(6px);font-size:12px;color:var(--ink-2)}
+.simbtn:hover{color:var(--ink);border-color:var(--tactile)}
+.sim{position:absolute;right:14px;top:58px;z-index:800;width:242px;padding:14px;background:var(--asphalt-800);
+  border:1px solid var(--rule);border-radius:var(--r-md);box-shadow:0 18px 40px rgba(0,0,0,.55);display:none}
+.sim.show{display:block;animation:rise .22s}
+.sim > p{margin:4px 0 11px;font-size:11px;color:var(--ink-3);line-height:1.5}
+.sim .btn{width:100%;margin-bottom:7px}
+
+.offline-note{position:absolute;inset:auto 0 0 0;z-index:850;margin:0 auto 60px;width:max-content;
+  max-width:88%;padding:11px 16px;background:#241E10;border:1px solid #5A4A1E;border-radius:var(--r-md);
+  font-size:12px;color:var(--ink-2);display:none;text-align:center;line-height:1.5}
+.offline-note.show{display:block}
+
+/* ============================================================ RESPONSIVE */
+@media (max-width:980px){ :root{--sidebar:330px} .loc-name{font-size:27px} }
+@media (max-width:760px){
+  .topbar{padding:9px 13px;gap:11px}
+  .brand p{display:none}
+  .pills .pill.hide-sm{display:none}
+  .clock{font-size:14px}
+  .layout{flex-direction:column}
+  .mapwrap{flex:0 0 48vh;order:1;border-bottom:1px solid var(--rule)}
+  .panel{order:2;width:100%;flex:1;border-right:0;-webkit-overflow-scrolling:touch}
+  .sos{padding:11px 13px;gap:11px}
+  .sos-text h2{font-size:16px}
+  .sos-text p{font-size:11.5px}
+  .block{padding:14px 13px}
+  .legend{display:none}
+  .basemap{top:auto;bottom:38px;left:10px;padding:2px}
+  .basemap button{padding:6px 10px;font-size:11px}
+  .zoom{bottom:38px;right:10px}
+  .simbtn{padding:7px 11px;right:10px;top:10px}
+  .sim{width:min(268px,calc(100vw - 24px));right:10px}
+  .map-actions{top:10px}
+  .map-actions .btn{padding:9px 15px;font-size:12.5px}
+  .popup{left:10px!important;right:10px;top:auto!important;bottom:10px;width:auto;
+    transform:translateY(130%);box-shadow:0 -10px 34px rgba(0,0,0,.6)}
+  .popup.show{transform:none}
+  .popup::after{display:none}
+  .toasts{bottom:auto;top:60px}
+  .gbar{bottom:10px;left:10px;right:10px;transform:none;max-width:none;justify-content:flex-start}
+  .gbar .gtag{display:none}
+}
+@media (max-width:560px){
+  .sos{flex-wrap:wrap}
+  .sos-act{margin-left:0;width:100%}
+  .sos-act .btn{flex:1}
+}
+@media (max-width:400px){ .tel{grid-template-columns:1fr 1fr} .tel div:last-child{grid-column:1/-1} }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="cane" viewBox="0 0 15 38" aria-hidden="true">
+        <rect x="5" y="0" width="5" height="38" rx="2.5" fill="#EEF3F7"/>
+        <rect x="5" y="20" width="5" height="9" fill="#E23B3B"/>
+        <circle cx="7.5" cy="35.5" r="3.4" fill="#FFC94A"/>
+      </svg>
+      <div>
+        <div class="wordmark">Blind<em>-</em>Track</div>
+        <p>Smart Blind Stick</p>
+      </div>
+    </div>
+    <div class="pills">
+      <div class="pill hide-sm"><span class="dot live" id="linkDot"></span><span id="linkTxt">Perangkat aktif</span></div>
+      <div class="pill hide-sm">GPS <b id="satTxt">3D · 9 sat</b></div>
+      <div class="pill">GSM <b id="gsmTxt">−64 dBm</b></div>
+      <div class="pill">Baterai <b id="battTxt">78%</b></div>
+      <div class="clock data" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <div class="sos" id="sosBar">
+    <div class="sos-mark" id="sosMark">SOS</div>
+    <div class="sos-text">
+      <h2 id="sosTitle">Tombol darurat ditekan</h2>
+      <p id="sosSub">Budi Santoso menekan tombol SOS di Smart Blind Stick · <span class="data" id="sosAgo">baru saja</span></p>
+    </div>
+    <div class="sos-act">
+      <button class="btn btn-sm btn-teal" id="sosRoute">Rute ke lokasi</button>
+      <button class="btn btn-sm" id="sosAck">Saya tangani</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="panel">
+
+      <div class="block">
+        <div class="block-head"><div class="eyebrow">Lokasi sekarang</div></div>
+        <h1 class="loc-name" id="curName">—</h1>
+        <p class="loc-sub" id="curAddr">Menunggu data GPS…</p>
+        <div class="loc-meta">
+          <div class="chip"><span>Koordinat</span><b id="curCoord">—</b></div>
+          <div class="chip"><span>Akurasi</span><b id="curAcc">—</b></div>
+        </div>
+        <div class="fresh">Data masuk <b id="fixAgo">—</b> · sinyal terakhir dari Smart Blind Stick <b id="beepAgo">—</b></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><div class="eyebrow">Kondisi perangkat</div></div>
+        <div class="tel">
+          <div><div class="k">Baterai</div><div class="v" id="tBatt">78<small>%</small></div>
+            <div class="bar"><i id="battBar" style="width:78%"></i></div></div>
+          <div><div class="k">Sinyal GSM</div><div class="v" id="tGsm">4<small>/5</small></div>
+            <div class="bar"><i id="gsmBar" style="width:80%"></i></div></div>
+          <div><div class="k">Satelit</div><div class="v" id="tSat">9<small> lock</small></div>
+            <div class="bar"><i id="satBar" style="width:75%"></i></div></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><div class="eyebrow">Tindakan cepat</div></div>
+        <div class="acts">
+          <button class="btn btn-primary wide" id="actBuzz">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+            Bunyikan buzzer Smart Blind Stick</button>
+          <a class="btn" href="tel:+6281200000000"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Telepon</a>
+          <button class="btn" id="actSms"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Kirim SMS</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><div class="eyebrow">Serahkan ke Google Maps</div></div>
+        <div class="acts">
+          <button class="btn btn-primary wide" id="gNav">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 21l9-4 9 4z"/></svg>
+            Navigasi ke pengguna</button>
+          <button class="btn" id="gView">Lihat lokasi</button>
+          <button class="btn" id="gPano">Street View</button>
+          <button class="btn wide" id="gShare">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-4-1L3 21l2.1-5a8.4 8.4 0 0 1-1-4 8.5 8.5 0 0 1 8.4-9 8.5 8.5 0 0 1 8.5 8.5z"/></svg>
+            Bagikan lokasi via WhatsApp</button>
+        </div>
+        <button class="btn btn-sm wide" id="gCopy" style="margin-top:8px">Salin tautan lokasi</button>
+      </div>
+
+      <div class="block" style="border-bottom:none">
+        <div class="block-head">
+          <div class="eyebrow">Riwayat lokasi</div>
+          <label class="toggle" title="Tampilkan jejak perjalanan di peta">
+            <input type="checkbox" id="trailSw" checked><span class="sw"></span> Jejak peta
+          </label>
+        </div>
+        <ul class="hist" id="histList"></ul>
+        <button class="btn btn-sm wide" id="histMore" style="margin-top:12px">Tampilkan semua riwayat</button>
+        <p class="data" style="margin:12px 0 4px;font-size:10.5px;color:var(--ink-3);text-align:center">
+          BLIND-STICK-01 · sinkron <span id="syncAgo">—</span></p>
+      </div>
+    </aside>
+
+    <section class="mapwrap" id="mapWrap">
+      <div id="map"></div>
+      <iframe id="gframe" title="Google Maps" loading="lazy" allowfullscreen
+              referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <div class="gbar" id="gbar">
+        <span class="gtag">Google Maps</span>
+        <button class="btn" id="gbLoc">Lokasi</button>
+        <button class="btn" id="gbRoute">Rute dari wali</button>
+        <button class="btn btn-primary" id="gbOpen">Buka aplikasi</button>
+      </div>
+
+      <div class="basemap" id="basemap">
+        <button data-style="dark" class="on">Gelap</button>
+        <button data-style="street">Jalan</button>
+        <button data-style="sat">Satelit</button>
+        <button data-style="google">Google</button>
+      </div>
+
+      <div class="map-actions" id="mapActions">
+        <button class="btn btn-primary" id="btnStart">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 21l9-4 9 4z"/></svg> Mulai</button>
+        <button class="btn btn-teal" id="btnDir">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h13"/><path d="m13 7 5 5-5 5"/></svg> Rute</button>
+      </div>
+
+      <div class="popup" id="popup">
+        <button class="x" id="popClose" aria-label="Tutup">×</button>
+        <h4 id="popName">—</h4>
+        <p id="popAddr">—</p>
+        <div class="kv"><span>Koordinat</span><b id="popCoord">—</b></div>
+        <div class="kv"><span>Waktu</span><b id="popTime">—</b></div>
+        <div class="kv"><span>Akurasi GPS</span><b id="popAcc">—</b></div>
+        <div class="pbtn">
+          <button class="btn btn-teal" id="popDir">Rute</button>
+          <button class="btn" id="popCopy">Salin</button>
+        </div>
+      </div>
+
+      <div class="zoom">
+        <button id="zIn" aria-label="Perbesar">+</button>
+        <button id="zOut" aria-label="Perkecil">−</button>
+        <button id="zHome" aria-label="Ke lokasi pengguna" style="font-size:14px">◎</button>
+      </div>
+
+      <div class="legend">
+        <div><b style="background:#FFC94A"></b> Jejak perjalanan hari ini</div>
+        <div><b style="background:#17B8C4"></b> Rute wali → pengguna</div>
+        <div><b style="background:#E23B3B"></b> Titik SOS</div>
+      </div>
+
+      <button class="simbtn" id="simBtn">◍ Mode demo</button>
+      <div class="sim" id="simPanel">
+        <div class="eyebrow">Konsol demo</div>
+        <p>Untuk simulasi saat presentasi PBL. Tidak ada di versi produksi.</p>
+        <button class="btn btn-red btn-sm" id="simSos">Kirim sinyal SOS</button>
+        <button class="btn btn-sm" id="simMove">Pengguna bergerak</button>
+        <button class="btn btn-sm" id="simDrop">Putus koneksi GSM</button>
+        <button class="btn btn-sm" id="simReset" style="margin-bottom:0">Ulang dari awal</button>
+      </div>
+
+      <div class="offline-note" id="offNote">
+        Peta online belum termuat di pratinjau ini. Unduh berkas HTML-nya dan buka langsung di browser —
+        petak peta diambil dari server publik OpenStreetMap.
+      </div>
+
+      <div class="toasts" id="toasts"></div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   1. DATA — real Batam coordinates
+   ============================================================ */
+const DEVICE = { id:"BLIND-STICK-01", user:"Budi Santoso", phone:"+6281200000000" };
+const GUARD  = { name:"Rumah wali", lat:1.10820, lon:104.08380 };
+
+// m = minutes ago, so the demo always reads as "today"
+const POINTS = [
+  {n:"Jl. Engku Putri",              a:"Trotoar depan Dataran Engku Putri, Batam Kota", lat:1.12896, lon:104.05480, m:5,   acc:6,  tag:"sos"},
+  {n:"Pelabuhan Ferry Batam Centre", a:"Terminal Ferry Internasional, Teluk Tering",    lat:1.13061, lon:104.05535, m:26,  acc:9,  tag:"stop"},
+  {n:"Mega Mall Batam Centre",       a:"Jl. Engku Putri No.1, Belian",                  lat:1.12934, lon:104.05588, m:50,  acc:11, tag:"stop"},
+  {n:"Dataran Engku Putri",          a:"Alun-alun Batam Centre, Teluk Tering",          lat:1.12927, lon:104.05387, m:79,  acc:7,  tag:""},
+  {n:"Masjid Agung Raja Hamidah",    a:"Jl. Engku Putri, Teluk Tering",                 lat:1.12625, lon:104.05340, m:113, acc:5,  tag:"stop"},
+  {n:"Jl. Ahmad Yani",               a:"Depan gerbang kampus, Teluk Tering",            lat:1.12100, lon:104.04660, m:144, acc:12, tag:""},
+  {n:"Politeknik Negeri Batam",      a:"Jl. Ahmad Yani, Teluk Tering, Batam Kota",      lat:1.11872, lon:104.04846, m:183, acc:6,  tag:"stop"},
+  {n:"Jl. Raja Isa",                 a:"Belian, Batam Kota",                            lat:1.11050, lon:104.06450, m:211, acc:14, tag:""},
+  {n:"Mall Botania 2",               a:"Jl. Raja Alikelana, Belian",                    lat:1.10778, lon:104.08594, m:249, acc:8,  tag:"stop"},
+  {n:"Perumahan Belian",             a:"Blok C2, Belian, Batam Kota",                   lat:1.10820, lon:104.08380, m:277, acc:5,  tag:"home"}
+];
+
+/* Google Maps handoff.
+   Leave `key` empty and the keyless classic embed is used — works with zero setup.
+   Fill it with a Maps Embed API key for the officially supported endpoint
+   (the Embed API is free and unmetered, it only requires a key). */
+const G = {
+  key: "",
+  view : p => `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`,
+  route: p => `https://www.google.com/maps/dir/?api=1&origin=${GUARD.lat},${GUARD.lon}`
+             + `&destination=${p.lat},${p.lon}&travelmode=driving`,
+  nav  : p => G.route(p) + "&dir_action=navigate",
+  pano : p => `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${p.lat},${p.lon}`,
+  embedPoint: p => G.key
+    ? `https://www.google.com/maps/embed/v1/place?key=${G.key}&q=${p.lat},${p.lon}&zoom=17`
+    : `https://maps.google.com/maps?q=${p.lat},${p.lon}&z=17&hl=id&output=embed`,
+  embedRoute: p => G.key
+    ? `https://www.google.com/maps/embed/v1/directions?key=${G.key}`
+      + `&origin=${GUARD.lat},${GUARD.lon}&destination=${p.lat},${p.lon}&mode=driving`
+    : `https://maps.google.com/maps?saddr=${GUARD.lat},${GUARD.lon}`
+      + `&daddr=${p.lat},${p.lon}&hl=id&output=embed`
+};
+
+const BASEMAPS = {
+  dark: { url:"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          sub:"abcd", max:20 },
+  street:{ url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          sub:"abcd", max:20 },
+  sat:  { url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          attr:'Citra &copy; Esri, Maxar, Earthstar Geographics', sub:"abc", max:19 },
+  osm:  { url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+          attr:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', sub:"abc", max:19 }
+};
+
+/* ============================================================
+   2. HELPERS
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2,"0");
+const MON = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+const fmtTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const fmtDate = d => `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+const coordTxt = p => `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+
+function ago(ms){
+  const s = Math.max(0, Math.round(ms/1000));
+  if(s < 60) return `${s} detik lalu`;
+  const m = Math.round(s/60);
+  if(m < 60) return `${m} menit lalu`;
+  return `${Math.floor(m/60)} jam ${m%60} menit lalu`;
+}
+function kmBetween(a,b){
+  const dy=(a.lat-b.lat)*110.57, dx=(a.lon-b.lon)*111.32*Math.cos(a.lat*Math.PI/180);
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function toast(msg,kind=""){
+  const box=$("#toasts"), t=document.createElement("div");
+  t.className="toast "+kind; t.textContent=msg; box.appendChild(t);
+  setTimeout(()=>{t.style.transition="opacity .3s";t.style.opacity="0";setTimeout(()=>t.remove(),320)},3000);
+}
+function beep(times=1){
+  try{
+    const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+    const ctx=new C();
+    for(let i=0;i<times;i++){
+      const o=ctx.createOscillator(), g=ctx.createGain(), t0=ctx.currentTime+i*0.24;
+      o.type="sine"; o.frequency.setValueAtTime(i%2?760:980,t0);
+      g.gain.setValueAtTime(0.0001,t0);
+      g.gain.exponentialRampToValueAtTime(0.22,t0+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+0.2);
+      o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0+0.22);
+    }
+  }catch(e){}
+}
+
+/* ============================================================
+   3. STATE
+   ============================================================ */
+const S = {
+  points: POINTS.map(p => ({...p, at:new Date(Date.now() - p.m*60000)})),
+  sel:0, expanded:false, showTrail:true,
+  sos:false, sosAck:false, sosAt:null,
+  navOn:false, online:true,
+  batt:78, gsm:4, sat:9, lastBeep:Date.now()-6000,
+  style:"dark", tilesOk:false, tileErrors:0
+};
+
+/* ============================================================
+   4. MAP — Leaflet + real tiles
+   ============================================================ */
+const map = L.map("map",{ zoomControl:false, attributionControl:true,
+  minZoom:11, maxZoom:19, zoomSnap:.5, worldCopyJump:true });
+
+let tileLayer = null;
+function setBasemap(key){
+  const wrap = $("#mapWrap");
+  document.querySelectorAll(".basemap button").forEach(b=>b.classList.toggle("on", b.dataset.style===key));
+  if(key === "google"){
+    S.style = "google";
+    wrap.classList.add("gmode");
+    syncGoogleFrame();
+    return;
+  }
+  wrap.classList.remove("gmode");
+  const cfg = BASEMAPS[key] || BASEMAPS.dark;
+  if(tileLayer) map.removeLayer(tileLayer);
+  tileLayer = L.tileLayer(cfg.url, {
+    attribution:cfg.attr, subdomains:cfg.sub, maxZoom:cfg.max
+  }).addTo(map);
+  tileLayer.on("load", ()=>{ S.tilesOk=true; $("#offNote").classList.remove("show"); });
+  tileLayer.on("tileerror", ()=>{
+    S.tileErrors++;
+    // one silent fallback to plain OSM before telling the user
+    if(S.tileErrors===6 && key!=="osm" && !S.tilesOk){ setBasemap("osm"); return; }
+    if(S.tileErrors>14 && !S.tilesOk) $("#offNote").classList.add("show");
+  });
+  S.style = key;
+  document.querySelectorAll(".basemap button").forEach(b=>b.classList.toggle("on", b.dataset.style===key));
+}
+setBasemap("dark");
+L.control.scale({ imperial:false, position:"bottomleft", maxWidth:110 }).addTo(map);
+
+let gMode = "point";                    // "point" | "route"
+function syncGoogleFrame(){
+  if(S.style !== "google") return;
+  const p = S.points[S.sel];
+  const src = (gMode === "route" || S.navOn) ? G.embedRoute(p) : G.embedPoint(p);
+  const f = $("#gframe");
+  if(f.getAttribute("src") !== src) f.setAttribute("src", src);
+  $("#gbLoc").classList.toggle("btn-teal", gMode === "point");
+  $("#gbRoute").classList.toggle("btn-teal", gMode === "route");
+}
+function openGm(url, label){
+  const w = window.open(url, "_blank", "noopener");
+  if(!w) toast((label||"Tautan") + " diblokir peramban — salin manual dari tombol Salin", "warn");
+}
+
+/* --- layers --- */
+const trailBase = L.polyline([], {color:"#3D3013", weight:11, opacity:.85, lineCap:"round", lineJoin:"round"});
+const trailDots = L.polyline([], {color:"#FFC94A", weight:6, opacity:1, lineCap:"round",
+                                  dashArray:"1 14", dashOffset:"0"});
+const navLine   = L.polyline([], {color:"#17B8C4", weight:5, opacity:.95, dashArray:"12 9", lineCap:"round"});
+const histLayer = L.layerGroup();
+
+let mainMarker=null, guardMarker=null;
+const histMarkers = [];
+
+function mainIconHtml(){
+  const col = S.sos ? "#E23B3B" : "#FFC94A";
+  return `<div class="mk-main ${S.sos?"is-sos":""}">
+    <span class="radar"></span><span class="radar d2"></span>
+    <svg class="pin" viewBox="0 0 26 36">
+      <path d="M13 35C13 35 24 22.5 24 13A11 11 0 1 0 2 13c0 9.5 11 22 11 22z"
+            fill="${col}" stroke="#0C1117" stroke-width="2"/>
+      <circle cx="13" cy="13" r="4.4" fill="#0C1117"/>
+    </svg></div>`;
+}
+function buildMarkers(){
+  // guardian
+  guardMarker = L.marker([GUARD.lat,GUARD.lon], {
+    icon:L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0],
+      html:`<div class="mk-guard"><b>Wali</b></div>`}), interactive:false, zIndexOffset:100
+  }).addTo(map);
+
+  // history
+  S.points.forEach((p,i)=>{
+    if(i===0) return;
+    const m = L.marker([p.lat,p.lon],{
+      icon:L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0],
+        html:`<div class="mk-hist" title="${p.n}"></div>`}), zIndexOffset:200
+    });
+    m.on("click", e=>{ L.DomEvent.stop(e); select(i); });
+    histMarkers.push(m); histLayer.addLayer(m);
+  });
+  histLayer.addTo(map);
+
+  // user
+  mainMarker = L.marker([S.points[0].lat,S.points[0].lon],{
+    icon:L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0], html:mainIconHtml()}),
+    zIndexOffset:900
+  }).addTo(map);
+  mainMarker.on("click", e=>{ L.DomEvent.stop(e); select(0); });
+}
+function refreshMain(){
+  if(!mainMarker) return;
+  mainMarker.setLatLng([S.points[0].lat, S.points[0].lon]);
+  mainMarker.setIcon(L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0], html:mainIconHtml()}));
+}
+function refreshHistMarkers(){
+  histMarkers.forEach((m,idx)=>{
+    const i = idx+1;
+    const on = i===S.sel;
+    m.setIcon(L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0],
+      html:`<div class="mk-hist ${on?"on":""}" title="${S.points[i].n}"></div>`}));
+  });
+}
+
+/* --- routing: OSRM public server, straight-line fallback --- */
+async function osrm(coords){
+  const s = coords.map(c=>`${c[1]},${c[0]}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${s}?overview=full&geometries=geojson`;
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), 7000);
+  try{
+    const r = await fetch(url,{signal:ctl.signal});
+    if(!r.ok) throw new Error("http");
+    const j = await r.json();
+    if(!j.routes || !j.routes.length) throw new Error("empty");
+    return { line:j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]),
+             km:j.routes[0].distance/1000, min:j.routes[0].duration/60 };
+  } finally { clearTimeout(timer); }
+}
+
+async function drawTrail(){
+  const coords = S.points.slice().reverse().map(p=>[p.lat,p.lon]);
+  let line = coords;
+  try{ line = (await osrm(coords)).line; }catch(e){ /* keep the straight polyline */ }
+  trailBase.setLatLngs(line); trailDots.setLatLngs(line);
+  if(S.showTrail){ trailBase.addTo(map); trailDots.addTo(map); }
+}
+async function startNav(){
+  const b = S.points[S.sel];
+  S.navOn = true;
+  let res=null;
+  try{ res = await osrm([[GUARD.lat,GUARD.lon],[b.lat,b.lon]]); }catch(e){}
+  if(res){ navLine.setLatLngs(res.line); }
+  else{
+    navLine.setLatLngs([[GUARD.lat,GUARD.lon],[b.lat,b.lon]]);
+    const km = kmBetween(GUARD,b)*1.32;
+    res = { km, min: Math.max(3, km/26*60) };
+  }
+  navLine.addTo(map);
+  gMode = "route"; syncGoogleFrame();
+  map.fitBounds(navLine.getBounds(), {padding:[70,70], maxZoom:16});
+  toast(`Navigasi aktif · ${res.km.toFixed(1)} km · ± ${Math.round(res.min)} menit berkendara`, "good");
+}
+function stopNav(){ S.navOn=false; map.removeLayer(navLine); gMode="point"; syncGoogleFrame(); }
+
+/* ============================================================
+   5. SELECTION + POPUP
+   ============================================================ */
+let popFor = null;
+function select(i, opts={}){
+  S.sel = i; popFor = i;
+  if(i >= 4) S.expanded = true;
+  refreshHistMarkers(); renderHistory();
+  const p = S.points[i];
+  if(!opts.noPan) map.setView([p.lat,p.lon], Math.max(map.getZoom(), 16), {animate:true});
+  $("#popName").textContent = p.n;
+  $("#popAddr").textContent = p.a;
+  $("#popCoord").textContent = coordTxt(p);
+  $("#popTime").textContent = `${fmtTime(p.at)} · ${fmtDate(p.at)}`;
+  $("#popAcc").textContent = `± ${p.acc} m`;
+  $("#popup").classList.add("show");
+  $("#mapActions").classList.add("show");
+  placePopup();
+  syncGoogleFrame();
+}
+function placePopup(){
+  if(popFor===null) return;
+  if(window.matchMedia("(max-width:760px)").matches) return;  // bottom sheet on phones
+  const p = S.points[popFor];
+  const pt = map.latLngToContainerPoint([p.lat,p.lon]);
+  const wrap = $("#mapWrap").getBoundingClientRect();
+  const pop = $("#popup"), w = pop.offsetWidth||252, h = pop.offsetHeight||210;
+  let x = Math.min(Math.max(pt.x, w/2+10), wrap.width - w/2 - 10);
+  let y = Math.min(Math.max(pt.y - 42, h + 10), wrap.height - 10);
+  pop.style.left = x+"px"; pop.style.top = y+"px";
+}
+function closePopup(){ $("#popup").classList.remove("show"); popFor=null; }
+
+map.on("move zoom resize", placePopup);
+map.on("click", ()=>{ closePopup(); $("#mapActions").classList.add("show"); });
+
+/* ============================================================
+   6. PANEL
+   ============================================================ */
+function renderCurrent(){
+  const p = S.points[0];
+  $("#curName").textContent = p.n;
+  $("#curAddr").textContent = p.a;
+  $("#curCoord").textContent = coordTxt(p);
+  $("#curAcc").textContent = `± ${p.acc} m`;
+}
+function renderHistory(){
+  const list = $("#histList"); list.textContent="";
+  (S.expanded ? S.points : S.points.slice(0,4)).forEach((p,i)=>{
+    const li = document.createElement("li");
+    li.className = i===S.sel ? "active" : "";
+    const tag = p.tag==="sos" ? '<span class="tagx tag-sos">SOS</span>'
+              : p.tag==="home"? '<span class="tagx tag-home">Rumah</span>'
+              : p.tag==="stop"? '<span class="tagx tag-stop">Berhenti</span>' : "";
+    li.innerHTML = `<div class="rail"><i></i></div>
+      <div class="h-body"><div class="h-title">${p.n}${tag}</div><div class="h-sub">${p.a}</div></div>
+      <div class="h-time">${fmtTime(p.at)}<small>${fmtDate(p.at)}</small></div>`;
+    li.addEventListener("click", ()=> select(i));
+    list.appendChild(li);
+  });
+  $("#histMore").textContent = S.expanded ? "Tampilkan 4 terakhir saja"
+                                          : `Tampilkan semua riwayat (${S.points.length})`;
+}
+function renderTelemetry(){
+  const b=S.batt, g=S.gsm, s=S.sat;
+  $("#tBatt").innerHTML=`${b}<small>%</small>`; $("#battTxt").textContent=b+"%";
+  const bb=$("#battBar"); bb.style.width=b+"%"; bb.className = b<15?"bad":b<35?"warn":"";
+  $("#tGsm").innerHTML = S.online?`${g}<small>/5</small>`:`0<small>/5</small>`;
+  $("#gsmBar").style.width = (S.online? g/5*100 : 0)+"%";
+  $("#gsmBar").className = S.online ? (g<=2?"warn":"") : "bad";
+  $("#gsmTxt").textContent = S.online ? `−${88-g*6} dBm` : "tidak ada";
+  $("#tSat").innerHTML=`${s}<small> lock</small>`; $("#satBar").style.width=Math.min(100,s/12*100)+"%";
+  $("#satTxt").textContent = S.online ? `3D · ${s} sat` : "tidak ada";
+  $("#linkDot").className = "dot " + (S.online?"live":"off");
+  $("#linkTxt").textContent = S.online ? "Perangkat aktif" : "Perangkat tidak terjangkau";
+}
+function tick(){
+  const now = new Date();
+  $("#clock").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  $("#fixAgo").textContent  = ago(Date.now() - S.points[0].at.getTime());
+  $("#beepAgo").textContent = S.online ? ago(Date.now() - S.lastBeep) : "terputus";
+  $("#syncAgo").textContent = S.online ? ago(Date.now() - S.lastBeep) : "gagal";
+  const el = $("#sosAgo");
+  if(S.sos && S.sosAt && el) el.textContent = ago(Date.now() - S.sosAt);
+  if(S.online && Math.random() < 0.35) S.lastBeep = Date.now() - Math.floor(Math.random()*9000);
+}
+
+/* ============================================================
+   7. SOS FLOW
+   ============================================================ */
+function raiseSos(){
+  S.sos=true; S.sosAck=false; S.sosAt=Date.now(); S.points[0].tag="sos";
+  const bar=$("#sosBar"); bar.classList.add("on"); bar.classList.remove("ack");
+  $("#sosMark").textContent="SOS";
+  $("#sosTitle").textContent="Tombol darurat ditekan";
+  $("#sosSub").innerHTML=`${DEVICE.user} menekan tombol SOS di Smart Blind Stick · <span class="data" id="sosAgo">baru saja</span>`;
+  $("#sosAck").textContent="Saya tangani"; $("#sosAck").onclick=ackSos;
+  refreshMain(); renderHistory(); select(0);
+  setTimeout(()=>map.invalidateSize(), 340);
+  beep(3);
+  toast("SMS darurat terkirim ke nomor wali","warn");
+}
+function ackSos(){
+  if(!S.sos) return;
+  S.sosAck=true;
+  $("#sosBar").classList.add("ack");
+  $("#sosMark").textContent="OK";
+  $("#sosTitle").textContent="Sedang ditangani";
+  $("#sosSub").innerHTML=`Wali menuju ${S.points[0].n} · <span class="data" id="sosAgo">baru saja</span>`;
+  $("#sosAck").textContent="Selesaikan"; $("#sosAck").onclick=clearSos;
+  startNav();
+  toast("Status dikirim balik ke Smart Blind Stick: bantuan sedang menuju lokasi","good");
+}
+function clearSos(){
+  S.sos=false; S.sosAck=false; S.points[0].tag="";
+  $("#sosBar").classList.remove("on","ack");
+  $("#sosAck").textContent="Saya tangani"; $("#sosAck").onclick=ackSos;
+  stopNav(); refreshMain(); renderHistory();
+  setTimeout(()=>map.invalidateSize(), 340);
+  toast("Kejadian ditutup");
+}
+
+/* ============================================================
+   8. EVENTS
+   ============================================================ */
+$("#histMore").addEventListener("click", ()=>{ S.expanded=!S.expanded; renderHistory(); });
+$("#trailSw").addEventListener("change", e=>{
+  S.showTrail = e.target.checked;
+  if(S.showTrail){ trailBase.addTo(map); trailDots.addTo(map); histLayer.addTo(map); }
+  else{ map.removeLayer(trailBase); map.removeLayer(trailDots); map.removeLayer(histLayer); }
+});
+$("#actBuzz").addEventListener("click", ()=>{ beep(2);
+  toast("Perintah terkirim — buzzer Smart Blind Stick berbunyi 10 detik","good"); });
+$("#actSms").addEventListener("click", ()=>{
+  toast("Membuka aplikasi pesan ke nomor Smart Blind Stick…");
+  try{ window.location.href = "sms:"+DEVICE.phone; }catch(e){}
+});
+$("#sosAck").onclick = ackSos;
+$("#sosRoute").addEventListener("click", ()=>{ select(0); startNav(); });
+$("#btnStart").addEventListener("click", startNav);
+$("#btnDir").addEventListener("click", openMaps);
+$("#popDir").addEventListener("click", openMaps);
+$("#popCopy").addEventListener("click", ()=>{
+  const t = coordTxt(S.points[S.sel]);
+  if(navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>{});
+  toast("Koordinat disalin: "+t,"good");
+});
+$("#popClose").addEventListener("click", closePopup);
+$("#zIn").addEventListener("click", ()=>map.zoomIn());
+$("#zOut").addEventListener("click", ()=>map.zoomOut());
+$("#zHome").addEventListener("click", ()=>select(0));
+$("#basemap").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.style !== "google"){ S.tileErrors = 0; S.tilesOk = false; }
+  setBasemap(b.dataset.style);
+});
+const cur = () => S.points[S.sel];
+$("#gNav").addEventListener("click",  ()=>{ openGm(G.nav(cur()),"Navigasi"); toast("Membuka navigasi Google Maps ke "+cur().n); });
+$("#gView").addEventListener("click", ()=> openGm(G.view(cur()),"Lokasi"));
+$("#gPano").addEventListener("click", ()=> openGm(G.pano(cur()),"Street View"));
+$("#gShare").addEventListener("click", ()=>{
+  const p = cur();
+  const msg = `Lokasi ${DEVICE.user} (BLIND-TRACK)\n${p.n} — ${p.a}\n`
+            + `${fmtTime(p.at)} ${fmtDate(p.at)}\n${G.view(p)}`;
+  openGm("https://wa.me/?text="+encodeURIComponent(msg),"WhatsApp");
+});
+$("#gCopy").addEventListener("click", ()=>{
+  const url = G.view(cur());
+  if(navigator.clipboard) navigator.clipboard.writeText(url).catch(()=>{});
+  toast("Tautan Google Maps disalin","good");
+});
+$("#gbLoc").addEventListener("click",  ()=>{ gMode="point"; syncGoogleFrame(); });
+$("#gbRoute").addEventListener("click",()=>{ gMode="route"; syncGoogleFrame(); });
+$("#gbOpen").addEventListener("click", ()=> openGm(gMode==="route"? G.route(cur()) : G.view(cur()),"Google Maps"));
+
+$("#simBtn").addEventListener("click", ()=>$("#simPanel").classList.toggle("show"));
+$("#simSos").addEventListener("click", ()=>{ raiseSos(); $("#simPanel").classList.remove("show"); });
+$("#simMove").addEventListener("click", movePerson);
+$("#simDrop").addEventListener("click", ()=>{
+  S.online=!S.online; renderTelemetry();
+  toast(S.online ? "Koneksi GSM pulih"
+                 : "Modul SIM800L kehilangan sinyal — lokasi terakhir dipertahankan",
+        S.online?"good":"warn");
+});
+$("#simReset").addEventListener("click", ()=>location.reload());
+window.addEventListener("resize", ()=>{ map.invalidateSize(); placePopup(); });
+window.addEventListener("keydown", e=>{
+  if(e.key==="Escape"){ closePopup(); $("#mapActions").classList.remove("show"); $("#simPanel").classList.remove("show"); }
+});
+
+function movePerson(){
+  const cur = S.points[0];
+  const next = { n:"Jl. Engku Putri", a:"Trotoar sisi utara, menuju halte Trans Batam",
+    lat: cur.lat + 0.00055, lon: cur.lon - 0.00042, m:0,
+    acc: 5+Math.round(Math.random()*6), tag: S.sos?"sos":"" , at:new Date() };
+  S.points.unshift(next);
+  if(S.points.length > 14) S.points.pop();
+
+  // the old head becomes a history marker
+  const m = L.marker([cur.lat,cur.lon],{
+    icon:L.divIcon({className:"mk-wrap", iconSize:[0,0], iconAnchor:[0,0],
+      html:`<div class="mk-hist" title="${cur.n}"></div>`}), zIndexOffset:200 });
+  m.on("click", ev=>{ L.DomEvent.stop(ev); select(S.points.indexOf(cur)); });
+  histMarkers.unshift(m); histLayer.addLayer(m);
+
+  S.lastBeep = Date.now();
+  renderCurrent(); renderHistory(); refreshMain(); refreshHistMarkers();
+  trailBase.setLatLngs([[next.lat,next.lon], ...trailBase.getLatLngs()]);
+  trailDots.setLatLngs([[next.lat,next.lon], ...trailDots.getLatLngs()]);
+  select(0);
+  toast("Titik lokasi baru diterima dari Smart Blind Stick");
+}
+
+function openMaps(){ openGm(G.route(S.points[S.sel]), "Rute"); }
+
+/* ============================================================
+   9. BOOT
+   ============================================================ */
+map.setView([S.points[0].lat, S.points[0].lon], 15);
+requestAnimationFrame(()=>map.invalidateSize());
+buildMarkers();
+renderCurrent(); renderHistory(); renderTelemetry();
+tick(); setInterval(tick, 1000);
+drawTrail();
+
+// frame the whole day first, then zoom to the emergency
+map.fitBounds(L.latLngBounds(S.points.map(p=>[p.lat,p.lon]).concat([[GUARD.lat,GUARD.lon]])),
+              {padding:[60,60]});
+setTimeout(()=>{
+  S.sos = true; S.sosAt = Date.now() - S.points[0].m*60000;
+  $("#sosBar").classList.add("on");
+  refreshMain();
+  map.invalidateSize();
+  map.flyTo([S.points[0].lat, S.points[0].lon], 17, {duration:1.6});
+  setTimeout(()=>select(0,{noPan:true}), 1700);
+}, 1400);
+</script>
+</body>
+</html>
